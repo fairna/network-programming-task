@@ -1,9 +1,9 @@
+from socket import *
 import socket
 import logging
+from file_protocol import FileProtocol
 import multiprocessing
 import concurrent.futures
-import argparse
-from file_protocol import FileProtocol
 
 fp = FileProtocol()
 
@@ -13,7 +13,7 @@ def handle_client(connection, address):
     buffer = ""
     try:
         while True:
-            data = connection.recv(128 * 1024 * 1024)
+            data = connection.recv(128*1024*1024)
             if not data:
                 break
             buffer += data.decode()
@@ -40,12 +40,15 @@ class Server:
         logging.warning(f"server running on ip address {self.ipinfo} with process pool size {self.pool_size}")
         self.my_socket.bind(self.ipinfo)
         self.my_socket.listen(1)
-
+        
+        # Create a ProcessPoolExecutor
         with concurrent.futures.ProcessPoolExecutor(max_workers=self.pool_size) as executor:
             try:
                 while True:
                     connection, client_address = self.my_socket.accept()
                     logging.warning(f"connection from {client_address}")
+                    
+                    # Submit the client handling task to the process pool
                     executor.submit(handle_client, connection, client_address)
             except KeyboardInterrupt:
                 logging.warning("Server shutting down")
@@ -56,19 +59,13 @@ class Server:
                     self.my_socket.close()
 
 
-def parse_arguments():
-    """
-    Parse command line arguments for the server configuration.
-    """
+def main():
+    import argparse
     parser = argparse.ArgumentParser(description='File Server')
     parser.add_argument('--port', type=int, default=6667, help='Server port (default: 6667)')
-    parser.add_argument('--pool-size', type=int, default=5, help='Process pool size (default: 5)')
-    return parser.parse_args()
-
-
-def main():
-    args = parse_arguments()
-
+    parser.add_argument('--pool-size', type=int, default=5, help='Thread pool size (default: 5)')
+    args = parser.parse_args()
+    
     svr = Server(ipaddress='0.0.0.0', port=args.port, pool_size=args.pool_size)
     svr.run()
     svr = Server(ipaddress='0.0.0.0', port=6667, pool_size=5)
@@ -76,6 +73,7 @@ def main():
 
 
 if __name__ == "__main__":
+    # This is important for multiprocessing to work properly on some platforms
     multiprocessing.freeze_support()
     logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
     main()
