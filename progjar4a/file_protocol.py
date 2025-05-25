@@ -1,58 +1,65 @@
-# file_interface.py
+# file_protocol.py
 
-import os
 import json
-import base64
-from glob import glob
+import logging
+import shlex
 
-class FileInterface:
+from file_interface import FileInterface
+
+"""
+* class FileProtocol bertugas untuk memproses 
+data yang masuk, dan menerjemahkannya apakah sesuai dengan
+protokol/aturan yang dibuat
+
+* data yang masuk dari client adalah dalam bentuk bytes yang 
+pada akhirnya akan diproses dalam bentuk string
+
+* class FileProtocol akan memproses data yang masuk dalam bentuk
+string
+"""
+class FileProtocol:
     def __init__(self):
-        os.chdir('files/')
-
-    def list(self, params=[]):
+        self.file = FileInterface()
+        
+    def proses_string(self, string_datamasuk=''):
+        logging.warning(f"processing string of length: {len(string_datamasuk)}")
         try:
-            filelist = glob('*.*')
-            return dict(status='OK', data=filelist)
-        except Exception as e:
-            return dict(status='ERROR', data=str(e))
-
-    def get(self, params=[]):
-        try:
-            filename = params[0]
-            if (filename == ''):
-                return dict(status='ERROR', data='Nama file tidak boleh kosong')
-            fp = open(f"{filename}", 'rb')
-            isifile = base64.b64encode(fp.read()).decode()
-            fp.close()
-            return dict(status='OK', data_namafile=filename, data_file=isifile)
-        except Exception as e:
-            return dict(status='ERROR', data=str(e))
-    
-    def upload(self, params=[]):
-        try:
-            if len(params) < 2:
-                return dict(status='ERROR', data='Parameter kurang')
-            filename = params[0]
-            isifile = base64.b64decode(params[1])
-            with open(filename, 'wb') as fp:
-                fp.write(isifile)
-            return dict(status='OK', data='File berhasil diupload')
-        except Exception as e:
-            return dict(status='ERROR', data=str(e))
-    
-    def delete(self, params=[]):
-        try:
-            if len(params) < 1:
-                return dict(status='ERROR', data='Parameter kurang')
-            filename = params[0]
-            if os.path.exists(filename):
-                os.remove(filename)
-                return dict(status='OK', data='File berhasil dihapus')
+            # Use a more robust method for splitting commands
+            # This helps handle large base64 encoded files without shlex issues
+            if " " not in string_datamasuk:
+                c_request = string_datamasuk.strip().lower()
+                params = []
             else:
-                return dict(status='ERROR', data='File tidak ditemukan')
+                parts = string_datamasuk.split(" ", 1)
+                c_request = parts[0].strip().lower()
+                
+                if len(parts) > 1:
+                    # For UPLOAD command, we need special handling due to large base64 content
+                    if c_request == "upload":
+                        # Split only on the first space after the filename
+                        filename_and_content = parts[1].split(" ", 1)
+                        params = filename_and_content
+                    else:
+                        # For other commands, use shlex for proper parameter parsing
+                        try:
+                            params = shlex.split(parts[1])
+                        except Exception as e:
+                            logging.warning(f"Error parsing parameters with shlex: {str(e)}")
+                            params = parts[1].split()
+                else:
+                    params = []
+            
+            logging.warning(f"processing request: {c_request} with {len(params)} parameters")
+            if hasattr(self.file, c_request):
+                cl = getattr(self.file, c_request)(params)
+                return json.dumps(cl)
+            else:
+                return json.dumps(dict(status='ERROR', data='Unknown command'))
         except Exception as e:
-            return dict(status='ERROR', data=str(e))
+            logging.warning(f"Error processing request: {str(e)}")
+            return json.dumps(dict(status='ERROR', data=f'Error processing request: {str(e)}'))
 
 
 if __name__=='__main__':
-    f = FileInterface()
+    #contoh pemakaian
+    fp = FileProtocol()
