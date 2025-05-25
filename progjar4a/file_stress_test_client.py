@@ -92,7 +92,7 @@ class StressTestClient:
             data_received = "" 
             while True:
                 try:
-                    data = sock.recv(8192)  # Increased buffer size
+                    data = sock.recv(128*1024*1024)  # Increased buffer size
                     if data:
                         data_received += data.decode()
                         if "\r\n\r\n" in data_received:
